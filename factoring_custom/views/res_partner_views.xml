@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record model="ir.ui.view" id="view_res_partner_inherit">
+        <field name="name">view.res.partner.inherit</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="account.view_partner_property_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='accounting']//field[@name='property_account_payable_id']" position="after">
+                <field name="is_factoring"/>
+                <field name="factoring_partner" groups="base.group_no_one"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
