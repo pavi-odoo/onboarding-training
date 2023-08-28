@@ -32,10 +32,11 @@ class AccountMove(models.Model):
         debtor_file = StringIO()
         account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"]),
-                  ("is_added_debtor", "=", False),
-                  ("company_id", "in", self._context.get("allowed_company_ids"))
-                  if "allowed_company_ids" in self._context.keys() else
-                  ("company_id", "=", self.env.user.company_id.id)]
+                  ("is_added_debtor", "=", False)]
+        if "allowed_company_ids" in self._context.keys():
+            domain.append(("company_id", "in", self._context.get("allowed_company_ids")))
+        else:
+            domain.append(("company_id", "=", self.env.user.company_id.id))
         debtor_records = account_move_records.search(domain=domain)
         if debtor_records:
             for rec in debtor_records:
@@ -103,10 +104,11 @@ class AccountMove(models.Model):
         invoice_file = StringIO()
         account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"]),
-                  ("is_added_invoice", "=", False),
-                  ("company_id", "in", self._context.get("allowed_company_ids"))
-                  if "allowed_company_ids" in self._context.keys() else (
-                      "company_id", "=", self.env.user.company_id.id)]
+                  ("is_added_invoice", "=", False)]
+        if "allowed_company_ids" in self._context.keys():
+            domain.append(("company_id", "in", self._context.get("allowed_company_ids")))
+        else:
+            domain.append(("company_id", "=", self.env.user.company_id.id))
         invoice_records = account_move_records.search(domain=domain)
         for rec in invoice_records:
             rec.is_added_invoice = True
