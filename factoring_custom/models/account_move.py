@@ -1,11 +1,16 @@
+import base64
+from io import StringIO
 from odoo import models, fields, api
-from datetime import datetime
+from datetime import datetime, timedelta
+from frozendict import frozendict
 
 
 class AccountMove(models.Model):
     _inherit = "account.move"
 
     is_factoring = fields.Boolean(string="Is Factoring")
+    is_added_invoice = fields.Boolean(string="Is added in invoice file")
+    is_added_debtor = fields.Boolean(string="Is added in debtor file")
 
     @api.model
     def create(self, vals):
@@ -19,100 +24,262 @@ class AccountMove(models.Model):
                 )
         return res
 
-    def generate_debtor_file(self):
-        debtor_file = open("/home/odoo/Desktop/test/kunde.sgf", "a+")
-        debtor_records = self.search([("move_type", "=", "out_invoice")])
-        for rec in debtor_records:
-            transaction_code = "{}".format("K")
-            version_number = "{:04d}".format(9409)
-            client_number = "{:04d}".format(1195)
-            debtor_number = (
-                "{:09d}".format(rec.partner_id.ref) if rec.partner_id.ref else " " * 9
-            )
-            org_no = (
-                "{:11d}".format(rec.partner_id.company_id.l10n_no_bronnoysund_number)
-                if (rec.partner_id.company_id.l10n_no_bronnoysund_number)
-                else " " * 11
-            )
-            last_name = (
-                f"{rec.partner_id.name}".rjust(35) if rec.partner_id else " " * 35
-            )
-            first_name = " " * 20
-            postal_address = (
-                f"{rec.partner_id.street}".rjust(30)
-                if rec.partner_id.street
-                else " " * 30
-            )
-            zipcode = (
-                f"{rec.partner_id.zip}".rjust(4) if rec.partner_id.zip else "0" * 4
-            )
-            city = (
-                f"{rec.partner_id.city}".rjust(23) if rec.partner_id.city else " " * 23
-            )
-            reference = " " * 20
-            phone_number = (
-                f"{rec.partner_id.phone}".rjust(12)
-                if rec.partner_id.phone
-                else " " * 12
-            )
-            country = "Norge"
-            country_code_alpha = "NO"
-            country_code_number = 578
-            bank_acc_no = "{:11d}".format(0)
-            seller_debtor_no = "{:4d}".format(0)
-            foreign_exchange_code = "NOK"
+    def append_data_in_debtor_file(self, attachment_debtor_file, read_debtor_file_data):
+        existing_data = base64.b64decode(attachment_debtor_file.datas).decode()
+        new_data = existing_data + read_debtor_file_data
+        encoded_new_data = base64.b64encode(new_data.encode()).decode()
+        attachment_debtor_file.write({"datas": encoded_new_data})
 
-            debtor_file.write(
-                f"{transaction_code}{version_number}{client_number}{debtor_number}{org_no}{last_name}"
-                f"{first_name}{postal_address}{zipcode}{city}{reference}{phone_number}{country}"
-                f"{country_code_alpha}{country_code_number}{bank_acc_no}{seller_debtor_no}"
-                f"{foreign_exchange_code}" + "\r\n"
-            )
+    def append_data_in_invoice_file(self, attachment_invoice_file, read_invoice_file_data):
+        existing_data = base64.b64decode(attachment_invoice_file.datas).decode()
+        new_data = existing_data + read_invoice_file_data
+        encoded_new_data = base64.b64encode(new_data.encode()).decode()
+        attachment_invoice_file.write({"datas": encoded_new_data})
 
-    def generate_invoice_file(self):
-        invoice_file = open("/home/odoo/Desktop/test/faktura.sgf", "a+")
-        invoice_records = self.search([("move_type", "=", "out_invoice")])
+    def generate_debtor_file(self, files):
+        attachment_debtor_file = (
+            files[1] if files[1].name == "faktura.sgf" else files[0]
+        )
+        debtor_file = StringIO()
+
+        domain = [
+            ("move_type", "in", ["out_invoice"]),
+            ("is_added_debtor", "=", False),
+            ("company_id", "=", self.env.user.company_id.id),
+        ]
+        if "allowed_company_ids" in self._context.keys():
+            domain = [
+                ("move_type", "in", ["out_invoice"]),
+                ("is_added_debtor", "=", False),
+                ("company_id", "in", self._context.get("allowed_company_ids")),
+            ]
+
+        debtor_records = self.env["account.move"].search(domain=domain)
+        if debtor_records:
+            for rec in debtor_records:
+                rec.is_added_debtor = True
+                line = ""
+                transaction_code = "K"
+                line += transaction_code
+                version_number = "9409"
+                line += version_number
+                client_number = "1195"
+                line += client_number
+                debtor_number = (
+                    f"{rec.partner_id.ref}".rjust(9, "0")[0:9]
+                    if rec.partner_id.ref
+                    else "0" * 9
+                )
+                line += debtor_number
+                org_no = (
+                    f"{rec.partner_id.company_id.l10n_no_bronnoysund_number}".rjust(
+                        11, "0"
+                    )[0:11]
+                    if (rec.partner_id.company_id.l10n_no_bronnoysund_number)
+                    else "0" * 11
+                )
+                line += org_no
+                last_name = (
+                    f"{rec.partner_id.name}".rjust(35, " ")[0:35]
+                    if rec.partner_id
+                    else " " * 35
+                )
+                line += last_name
+                first_name = " " * 20
+                line += first_name
+                postal_address = (
+                    f"{rec.partner_id.street}".rjust(30, " ")[0:30]
+                    if rec.partner_id.street
+                    else " " * 30
+                )
+                line += postal_address
+                zipcode = (
+                    f"{rec.partner_id.zip}".rjust(4, "0")[0:4]
+                    if rec.partner_id.zip
+                    else "0" * 4
+                )
+                line += zipcode
+                city = (
+                    f"{rec.partner_id.city}".rjust(23, " ")[0:23]
+                    if rec.partner_id.city
+                    else " " * 23
+                )
+                line += city
+                reference = " " * 20
+                line += reference
+                phone_number = (
+                    f"{rec.partner_id.phone}".rjust(12, " ")[0:12]
+                    if rec.partner_id.phone
+                    else " " * 12
+                )
+                line += phone_number
+                country = "Norge".rjust(20, " ")
+                line += country
+                country_code_alpha = "NO"
+                line += country_code_alpha
+                country_code_number = "578"
+                line += country_code_number
+                bank_acc_no = "0" * 11
+                line += bank_acc_no
+                seller_debtor_no = "0" * 4
+                line += seller_debtor_no
+                foreign_exchange_code = "NOK"
+                name_2 = " " * 35
+                line += name_2
+                line += foreign_exchange_code
+
+                debtor_file.write(line + "\r\n")
+
+        debtor_file.seek(0)
+
+        read_debtor_file_data = debtor_file.read()
+        if attachment_debtor_file.datas:
+            self.append_data_in_debtor_file(
+                attachment_debtor_file, read_debtor_file_data
+            )
+        else:
+            encoded_data = base64.b64encode(read_debtor_file_data.encode()).decode()
+            values = {"datas": encoded_data}
+            attachment_debtor_file.write(values)
+
+    def generate_invoice_file(self, files):
+        attachment_invoice_file = files[0] if files[0].name == "kunde.sgf" else files[1]
+        invoice_file = StringIO()
+        domain = [
+            ("move_type", "in", ["out_invoice"]),
+            ("is_added_invoice", "=", False),
+            ("company_id", "=", self.env.user.company_id.id),
+        ]
+        if "allowed_company_ids" in self._context.keys():
+            domain = [
+                ("move_type", "in", ["out_invoice"]),
+                ("is_added_invoice", "=", False),
+                ("company_id", "in", self._context.get("allowed_company_ids")),
+            ]
+        invoice_records = self.env["account.move"].search(domain=domain)
         for rec in invoice_records:
-            transaction_code = 1
-            client_no = "{:04d}".format(1195)
+            rec.is_added_invoice = True
+            line = ""
+            transaction_code = "1" if rec.move_type == "out_invoice" else "9"
+            line += transaction_code
+            client_no = "1195"
+            line += client_no
             customer_id = (
-                "{:09d}".format(rec.partner_id.id) if rec.partner_id else " " * 9
+                str(rec.partner_id.ref).rjust(9, "0")[0:9]
+                if rec.partner_id.ref
+                else "0" * 9
             )
-            credit_note_no = f"{rec.name}".rjust(8) if rec.name else " " * 8
+            line += customer_id
+            credit_note_no = rec.name[-8:] if rec.name else " " * 8
+            line += credit_note_no
             credit_note_date = (
-                "{:6d}".format(
-                    int(
-                        datetime.strptime(str(rec.invoice_date), "%Y-%m-%d").strftime(
-                            "%y%m%d"
-                        )
-                    )
+                f"{datetime.strptime(str(rec.invoice_date), '%Y-%m-%d').strftime('%y%m%d')}".rjust(
+                    6, "0"
                 )
                 if rec.invoice_date
-                else " " * 6
+                else "0" * 6
             )
+            line += credit_note_date
             due_date = (
-                "{:6d}".format(
-                    int(
-                        datetime.strptime(str(rec.invoice_date), "%Y-%m-%d").strftime(
-                            "%y%m%d"
-                        )
-                    )
+                f"{datetime.strptime(str(rec.invoice_date), '%Y-%m-%d').strftime('%y%m%d')}".rjust(
+                    6, "0"
                 )
                 if rec.invoice_date
-                else " " * 6
+                else "0" * 6
             )
+            line += due_date
             amount = (
-                "{:08.3f}".format(rec.amount_total_signed)
+                str(round(rec.amount_total_signed)).rjust(11, "0")
                 if rec.amount_total_signed
                 else "0" * 11
             )
-            discount_terms = f"{rec.invoice_payment_term_id.line_ids.months}".rjust(3)+{}
-
-            invoice_file.write(
-                f"{transaction_code}{client_no}{customer_id}{credit_note_no}{credit_note_date}{due_date}"
-                f"{amount}{discount_terms}" + "\r\n"
+            line += amount
+            discount_terms = f"{rec.invoice_payment_term_id.line_ids.months}".rjust(
+                3, "0"
+            ) + (
+                str(round(rec.invoice_payment_term_id.line_ids.discount_percentage))
+                if rec.invoice_payment_term_id.line_ids.discount_percentage
+                else "0" * 2
             )
+            line += discount_terms
+            invoice_file.write(line + "\r\n")
+        invoice_file.seek(0)
+        read_invoice_file_data = invoice_file.read()
+        if attachment_invoice_file.datas:
+            self.append_data_in_invoice_file(
+                attachment_invoice_file, read_invoice_file_data
+            )
+        else:
+            encoded_data = base64.b64encode(read_invoice_file_data.encode()).decode()
+            values = {"datas": encoded_data}
+            attachment_invoice_file.write(values)
 
     def _cron_file_generator(self):
-        self.generate_invoice_file()
-        self.generate_debtor_file()
+        files = self.test_context()
+        self.generate_invoice_file(files=files)
+        self.generate_debtor_file(files=files)
+
+    def test_context(self):
+        folder = self.env["documents.folder"].search(
+            [("name", "=", "Factoring Folder")]
+        )
+        lst = []
+        if not folder.document_ids:
+            Attachment1 = self.env["ir.attachment"].create(
+                {
+                    "name": "kunde.sgf",
+                    "store_fname": "kunde.sgf",
+                    "type": "binary",
+                }
+            )
+            Attachment2 = self.env["ir.attachment"].create(
+                {"name": "faktura.sgf", "store_fname": "faktura.sgf", "type": "binary"}
+            )
+            doc = self.env["documents.document"].create(
+                [
+                    {
+                        "folder_id": folder.id,
+                        "attachment_id": Attachment1.id,
+                    },
+                    {
+                        "folder_id": folder.id,
+                        "attachment_id": Attachment2.id,
+                    },
+                ]
+            )
+            lst = [rec for rec in doc]
+
+        elif folder.document_ids:
+            for rec in folder.document_ids:
+                if rec.name in ["kunde.sgf", "faktura.sgf"]:
+                    lst.append(rec)
+                else:
+                    Attachment1 = self.env["ir.attachment"].create(
+                        {
+                            "name": "kunde.sgf",
+                            "store_fname": "kunde.sgf",
+                            "type": "binary",
+                        }
+                    )
+                    Attachment2 = self.env["ir.attachment"].create(
+                        {
+                            "name": "faktura.sgf",
+                            "store_fname": "faktura.sgf",
+                            "type": "binary",
+                        }
+                    )
+                    doc = self.env["documents.document"].create(
+                        [
+                            {
+                                "folder_id": folder.id,
+                                "attachment_id": Attachment1.id,
+                            },
+                            {
+                                "folder_id": folder.id,
+                                "attachment_id": Attachment2.id,
+                            },
+                        ]
+                    )
+                    lst = [record for record in doc]
+
+        return lst

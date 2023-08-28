@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="documents_factoring_folder" model="documents.folder" forcecreate="0">
+        <field name="name">Factoring Folder</field>
+    </record>
+</odoo>
