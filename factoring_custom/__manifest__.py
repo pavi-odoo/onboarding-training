@@ -21,7 +21,9 @@
         "views/res_config_settings_views.xml",
         "views/res_partner_bank_views.xml",
     ],
-    "demo": ["demo/factoring_document_folder.xml"],
+    "demo": [
+        "demo/factoring_document_folder.xml"
+    ],
     "installable": True,
     "application": True,
     "auto_install": False,
