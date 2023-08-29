@@ -1,8 +1,8 @@
 import base64
 from io import StringIO
-from odoo import models, fields, api
-from datetime import datetime, timedelta
-from frozendict import frozendict
+from odoo import models, fields, api, Command
+from datetime import datetime
+from odoo.exceptions import ValidationError
 
 
 class AccountMove(models.Model):
@@ -27,8 +27,8 @@ class AccountMove(models.Model):
         encoded_new_data = base64.b64encode(new_data.encode()).decode()
         attachment_file.write({"datas": encoded_new_data})
 
-    def generate_debtor_file(self, files):
-        attachment_debtor_file = (files[1] if files[1].name == "faktura.sgf" else files[0])
+    def generate_debtor_file(self, file):
+        attachment_debtor_file = file
         debtor_file = StringIO()
         account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"]),
@@ -99,8 +99,8 @@ class AccountMove(models.Model):
             values = {"datas": encoded_data}
             attachment_debtor_file.write(values)
 
-    def generate_invoice_file(self, files):
-        attachment_invoice_file = files[0] if files[0].name == "kunde.sgf" else files[1]
+    def generate_invoice_file(self, file):
+        attachment_invoice_file = file
         invoice_file = StringIO()
         account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"]),
@@ -148,45 +148,52 @@ class AccountMove(models.Model):
             attachment_invoice_file.write(values)
 
     def _cron_file_generator(self):
-        files = self.generate_files()
-        self.generate_invoice_file(files=files)
-        self.generate_debtor_file(files=files)
+        self.generate_files()
 
-    def create_file_vals(self, attachments, documents, factoring_folder):
-        debtor = attachments.create(
-            {"name": "kunde.sgf",
-             "store_fname": "kunde.sgf",
-             "type": "binary", })
-        invoice = attachments.create(
-            {"name": "faktura.sgf",
-             "store_fname": "faktura.sgf",
-             "type": "binary"})
+    def create_file_vals(self, factoring_folder):
+        documents = self.env['documents.document']
+        attachments = self.env['ir.attachment']
+        debtor = attachments.create({
+            "name": "kunde.sgf",
+            "store_fname": "kunde.sgf",
+            "type": "binary"
+        })
+
+        invoice = attachments.create({
+            "name": "faktura.sgf",
+            "store_fname": "faktura.sgf",
+            "type": "binary"
+        })
         files = documents.create(
             [{
                 "folder_id": factoring_folder.id,
-                "attachment_id": debtor.id
+                "attachment_id": invoice.id
             }, {
                 "folder_id": factoring_folder.id,
-                "attachment_id": invoice.id
+                "attachment_id": debtor.id
             }])
 
         return [rec for rec in files]
 
     def generate_files(self):
-        document_folders = self.env["documents.folder"]
-        documents = self.env["documents.document"]
-        attachments = self.env["ir.attachment"]
-        domain = [("name", "=", "Factoring Folder")]
-        factoring_folder = document_folders.search(domain=domain)
-        files_lst = []
-        if not factoring_folder.document_ids:
-            files_lst = self.create_file_vals(attachments, documents, factoring_folder)
+        try:
+            factoring_folder = self.env.ref('factoring_custom.documents_factoring_folder')
+            if not factoring_folder.document_ids:
+                self.create_file_vals(factoring_folder)
 
-        elif factoring_folder.document_ids:
-            for rec in factoring_folder.document_ids:
-                if rec.name in ["kunde.sgf", "faktura.sgf"]:
-                    files_lst.append(rec)
-                else:
-                    files_lst = self.create_file_vals(attachments, documents, factoring_folder)
+            debtor_file = factoring_folder.document_ids.filtered(lambda file: file.name == 'kunde.sgf')
+            invoice_file = factoring_folder.document_ids.filtered(lambda file: file.name == 'faktura.sgf')
+            if debtor_file:
+                self.generate_debtor_file(debtor_file)
+            if invoice_file:
+                self.generate_invoice_file(invoice_file)
 
-        return files_lst
+            else:
+                if debtor_file:
+                    self.generate_debtor_file(debtor_file)
+
+                if invoice_file:
+                    self.generate_invoice_file(invoice_file)
+
+        except:
+            ValidationError("Files kunde.sgf and faktura.sgf are not found.")
