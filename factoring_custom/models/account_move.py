@@ -34,7 +34,7 @@ class AccountMove(models.Model):
         encoded_new_data = base64.b64encode(new_data.encode()).decode()
         attachment_file.write({"datas": encoded_new_data})
 
-    def record_filter_domain(self, field_value):
+    def account_record_filter(self, field_value):
         account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"])]
         company_ids = "allowed_company_ids" in self._context.keys() and self._context.get("allowed_company_ids") or [
@@ -52,7 +52,7 @@ class AccountMove(models.Model):
         attachment_debtor_file = file
         debtor_file = StringIO()
         field_value = ("is_added_debtor", "=", False)
-        records = self.record_filter_domain(field_value=field_value)
+        records = self.account_record_filter(field_value=field_value)
         debtor_records = records
         if debtor_records:
             for rec in debtor_records:
@@ -123,7 +123,7 @@ class AccountMove(models.Model):
         attachment_invoice_file = file
         invoice_file = StringIO()
         field_value = ("is_added_invoice", "=", False)
-        records = self.record_filter_domain(field_value=field_value)
+        records = self.account_record_filter(field_value=field_value)
         invoice_records = records
         for rec in invoice_records:
             rec.is_added_invoice = True
