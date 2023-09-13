@@ -35,12 +35,14 @@ class AccountMove(models.Model):
         attachment_file.write({"datas": encoded_new_data})
 
     def record_filter_domain(self, field_value):
+        account_move_records = self.env["account.move"]
         domain = [("move_type", "in", ["out_invoice"])]
         company_ids = "allowed_company_ids" in self._context.keys() and self._context.get("allowed_company_ids") or [
             self.env.user.company_id.id]
         domain.append(field_value)
         domain.append(("company_id", "in", company_ids))
-        return domain
+        records = account_move_records.search(domain=domain)
+        return records
 
     def generate_debtor_file(self, file):
         '''
@@ -49,10 +51,9 @@ class AccountMove(models.Model):
         '''
         attachment_debtor_file = file
         debtor_file = StringIO()
-        account_move_records = self.env["account.move"]
         field_value = ("is_added_debtor", "=", False)
-        domain = self.record_filter_domain(field_value=field_value)
-        debtor_records = account_move_records.search(domain=domain)
+        records = self.record_filter_domain(field_value=field_value)
+        debtor_records = records
         if debtor_records:
             for rec in debtor_records:
                 rec.is_added_debtor = True
@@ -121,10 +122,9 @@ class AccountMove(models.Model):
         """
         attachment_invoice_file = file
         invoice_file = StringIO()
-        account_move_records = self.env["account.move"]
         field_value = ("is_added_invoice", "=", False)
-        domain = self.record_filter_domain(field_value=field_value)
-        invoice_records = account_move_records.search(domain=domain)
+        records = self.record_filter_domain(field_value=field_value)
+        invoice_records = records
         for rec in invoice_records:
             rec.is_added_invoice = True
             line = ""
