@@ -12,7 +12,6 @@ class AccountMove(models.Model):
     is_added_invoice = fields.Boolean(string="Is added in invoice file")
     is_added_debtor = fields.Boolean(string="Is added in debtor file")
 
-    @api.model
     def create(self, vals):
         """
         if is_factoring enable narration automatic appear from
@@ -21,8 +20,8 @@ class AccountMove(models.Model):
         res = super(AccountMove, self).create(vals)
         config_parameter = self.env["ir.config_parameter"]
         for rec in res:
-            if rec.is_factoring:
-                res["narration"] = (config_parameter.sudo().get_param("factoring_custom.assignment_clause"))
+            res["narration"] = (rec.is_factoring and config_parameter.sudo()
+                                .get_param("factoring_custom.assignment_clause") or " ")
         return res
 
     def append_data_in_file(self, attachment_file, read_file_data):
@@ -35,6 +34,14 @@ class AccountMove(models.Model):
         encoded_new_data = base64.b64encode(new_data.encode()).decode()
         attachment_file.write({"datas": encoded_new_data})
 
+    def record_filter_domain(self, field_value):
+        domain = [("move_type", "in", ["out_invoice"])]
+        company_ids = "allowed_company_ids" in self._context.keys() and self._context.get("allowed_company_ids") or [
+            self.env.user.company_id.id]
+        domain.append(field_value)
+        domain.append(("company_id", "in", company_ids))
+        return domain
+
     def generate_debtor_file(self, file):
         '''
         it generates debtor file with the help of StringIO(buffer file)
@@ -43,12 +50,8 @@ class AccountMove(models.Model):
         attachment_debtor_file = file
         debtor_file = StringIO()
         account_move_records = self.env["account.move"]
-        domain = [("move_type", "in", ["out_invoice"]),
-                  ("is_added_debtor", "=", False)]
-        if "allowed_company_ids" in self._context.keys():
-            domain.append(("company_id", "in", self._context.get("allowed_company_ids")))
-        else:
-            domain.append(("company_id", "=", self.env.user.company_id.id))
+        field_value = ("is_added_debtor", "=", False)
+        domain = self.record_filter_domain(field_value=field_value)
         debtor_records = account_move_records.search(domain=domain)
         if debtor_records:
             for rec in debtor_records:
@@ -119,12 +122,8 @@ class AccountMove(models.Model):
         attachment_invoice_file = file
         invoice_file = StringIO()
         account_move_records = self.env["account.move"]
-        domain = [("move_type", "in", ["out_invoice"]),
-                  ("is_added_invoice", "=", False)]
-        if "allowed_company_ids" in self._context.keys():
-            domain.append(("company_id", "in", self._context.get("allowed_company_ids")))
-        else:
-            domain.append(("company_id", "=", self.env.user.company_id.id))
+        field_value = ("is_added_invoice", "=", False)
+        domain = self.record_filter_domain(field_value=field_value)
         invoice_records = account_move_records.search(domain=domain)
         for rec in invoice_records:
             rec.is_added_invoice = True
