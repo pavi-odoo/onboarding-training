@@ -1,5 +1,4 @@
 from odoo import fields, models, api
-import codecs
 
 
 class ResPartnerBank(models.Model):

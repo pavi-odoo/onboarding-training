@@ -8,6 +8,9 @@ class ResConfigSettings(models.TransientModel):
 
     @api.model
     def set_values(self):
+        """
+        Set value in res config setting.
+        """
         super(ResConfigSettings, self).set_values()
         config_parameter = self.env["ir.config_parameter"]
         config_parameter.sudo().set_param("factoring_custom.assignment_clause", self.assignment_clause)
@@ -15,6 +18,9 @@ class ResConfigSettings(models.TransientModel):
 
     @api.model
     def get_values(self):
+        """
+        Get value after save the settings.
+        """
         res = super(ResConfigSettings, self).get_values()
         config_parameter = self.env["ir.config_parameter"]
         res.update(

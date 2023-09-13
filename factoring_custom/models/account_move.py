@@ -14,6 +14,10 @@ class AccountMove(models.Model):
 
     @api.model
     def create(self, vals):
+        """
+        if is_factoring enable narration automatic appear from
+        res_setting.
+        """
         res = super(AccountMove, self).create(vals)
         config_parameter = self.env["ir.config_parameter"]
         for rec in res:
@@ -22,12 +26,20 @@ class AccountMove(models.Model):
         return res
 
     def append_data_in_file(self, attachment_file, read_file_data):
+        """
+        it will append the data after existing data in both debtor
+        and invoice files.
+        """
         existing_data = base64.b64decode(attachment_file.datas).decode()
         new_data = existing_data + read_file_data
         encoded_new_data = base64.b64encode(new_data.encode()).decode()
         attachment_file.write({"datas": encoded_new_data})
 
     def generate_debtor_file(self, file):
+        '''
+        it generates debtor file with the help of StringIO(buffer file)
+        based on current company.
+        '''
         attachment_debtor_file = file
         debtor_file = StringIO()
         account_move_records = self.env["account.move"]
@@ -100,6 +112,10 @@ class AccountMove(models.Model):
             attachment_debtor_file.write(values)
 
     def generate_invoice_file(self, file):
+        """
+        it generates invoice file with the help of StringIO(buffer file)
+        based on current company.
+        """
         attachment_invoice_file = file
         invoice_file = StringIO()
         account_move_records = self.env["account.move"]
@@ -151,6 +167,11 @@ class AccountMove(models.Model):
         self.generate_files()
 
     def create_file_vals(self, factoring_folder):
+        """
+        create attachments in folder and documents.
+        for invoice==> faktura.sgf
+        for debtor==> kunde.sgf
+        """
         documents = self.env['documents.document']
         attachments = self.env['ir.attachment']
         debtor = attachments.create({
@@ -176,13 +197,17 @@ class AccountMove(models.Model):
         return [rec for rec in files]
 
     def generate_files(self):
+        """
+        Check documents and folder. If not exist due to some uncertain behaviour
+        it will generate and only append datas in existing files.
+        """
         try:
-            factoring_folder = self.env.ref('factoring_custom.documents_factoring_folder')
+            factoring_folder = self.env.ref('factoring_custom.documents_factoring_folder').document_ids
             if not factoring_folder.document_ids:
                 self.create_file_vals(factoring_folder)
 
-            debtor_file = factoring_folder.document_ids.filtered(lambda file: file.name == 'kunde.sgf')
-            invoice_file = factoring_folder.document_ids.filtered(lambda file: file.name == 'faktura.sgf')
+            debtor_file = factoring_folder.filtered(lambda file: file.name == 'kunde.sgf')
+            invoice_file = factoring_folder.filtered(lambda file: file.name == 'faktura.sgf')
             if debtor_file:
                 self.generate_debtor_file(debtor_file)
             if invoice_file:
